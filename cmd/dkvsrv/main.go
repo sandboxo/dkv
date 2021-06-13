@@ -56,7 +56,7 @@ var (
 func init() {
 	flag.BoolVar(&disklessMode, "dbDiskless", false, fmt.Sprintf("Enables diskless mode where data is stored entirely in memory.\nAvailable on Badger for standalone and slave roles. (default %v)", disklessMode))
 	flag.StringVar(&dbFolder, "dbFolder", "/tmp/dkvsrv", "DB folder path for storing data files")
-	flag.StringVar(&dbListenAddr, "dbListenAddr", "127.0.0.1:8080", "Address on which the DKV service binds")
+	flag.StringVar(&dbListenAddr, "dbListenAddr", "0.0.0.0:8080", "Address on which the DKV service binds")
 	flag.StringVar(&dbEngine, "dbEngine", "rocksdb", "Underlying DB engine for storing data - badger|rocksdb")
 	flag.StringVar(&dbEngineIni, "dbEngineIni", "", "An .ini file for configuring the underlying storage engine. Refer badger.ini or rocks.ini for more details.")
 	flag.StringVar(&dbRole, "dbRole", "none", "DB role of this node - none|master|slave")
@@ -327,7 +327,7 @@ func setFlagsForNexusDirs() {
 
 func setupStats() {
 	if statsdAddr != "" {
-		statsCli = stats.NewStatsDClient(statsdAddr, "dkv")
+		statsCli = stats.NewStatsDClient(statsdAddr, "dkv.")
 	} else {
 		statsCli = stats.NewNoOpClient()
 	}
@@ -341,11 +341,17 @@ func newKVStore() (storage.KVStore, storage.ChangePropagator, storage.ChangeAppl
 		slg.Fatalf("Unable to create DB folder at %s. Error: %v.", dbFolder, err)
 	}
 
-	dbDir := path.Join(dbFolder, "data")
-	slg.Infof("Using %s as data folder", dbDir)
+	dataDir := path.Join(dbFolder, "data")
+	slg.Infof("Using %s as data directory", dataDir)
 	switch dbEngine {
 	case "rocksdb":
-		rocksDb, err := rocksdb.OpenDB(dbDir,
+		sstDir := path.Join(dbFolder, "sst")
+		if err := os.MkdirAll(sstDir, 0777); err != nil {
+			slg.Fatalf("Unable to create sst folder at %s. Error: %v.", dbFolder, err)
+		}
+
+		rocksDb, err := rocksdb.OpenDB(dataDir,
+			rocksdb.WithSSTDir(sstDir),
 			rocksdb.WithSyncWrites(),
 			rocksdb.WithCacheSize(blockCacheSize),
 			rocksdb.WithRocksDBConfig(dbEngineIni),
@@ -368,7 +374,7 @@ func newKVStore() (storage.KVStore, storage.ChangePropagator, storage.ChangeAppl
 		if disklessMode {
 			bdbOpts = append(bdbOpts, badger.WithInMemory())
 		} else {
-			bdbOpts = append(bdbOpts, badger.WithDBDir(dbDir))
+			bdbOpts = append(bdbOpts, badger.WithDBDir(dataDir))
 		}
 		badgerDb, err = badger.OpenDB(bdbOpts...)
 		if err != nil {
