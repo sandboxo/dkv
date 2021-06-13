@@ -133,11 +133,10 @@ func testDistAtomicIncrDecr(t *testing.T) {
 
 	// even threads increment, odd threads decrement
 	// a given key, all this done across cluster nodes
-	cliID := 0
 	for i := 0; i < numThrs; i++ {
 		wg.Add(1)
 		// cycle through the next cluster node client
-		cliID = 1 + (cliID+1)%clusterSize
+		cliID := 1 + i%clusterSize
 		go func(id, clId int) {
 			defer wg.Done()
 			delta := byte(0)
@@ -148,12 +147,20 @@ func testDistAtomicIncrDecr(t *testing.T) {
 			}
 			dkvCli := dkvClis[clId]
 			for {
-				exist, _ := dkvCli.Get(rc, casKey)
-				expect := exist.Value
-				update := []byte{expect[0] + delta}
-				res, err := dkvCli.CompareAndSet(casKey, expect, update)
-				if res && err == nil {
+				exist, err := dkvCli.Get(rc, casKey)
+				if err != nil {
+					t.Errorf("Unable to perform GET against client ID: %d. Error: %v", clId, err)
 					break
+				}
+				expect := exist.Value
+				if len(expect) > 0 {
+					update := []byte{expect[0] + delta}
+					res, err := dkvCli.CompareAndSet(casKey, expect, update)
+					if res && err == nil {
+						break
+					}
+				} else {
+					t.Logf("Empty GET against client ID: %d. Error: %v", clId, err)
 				}
 			}
 		}(i, cliID)

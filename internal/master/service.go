@@ -50,8 +50,7 @@ func NewStandaloneService(store storage.KVStore, cp storage.ChangePropagator, br
 func (ss *standaloneService) Put(ctx context.Context, putReq *serverpb.PutRequest) (*serverpb.PutResponse, error) {
 	ss.rwl.RLock()
 	defer ss.rwl.RUnlock()
-
-	if err := ss.store.Put(putReq.Key, putReq.Value); err != nil {
+	if err := ss.store.PutTTL(putReq.Key, putReq.Value, putReq.ExpireTS); err != nil {
 		ss.lg.Error("Unable to PUT", zap.Error(err))
 		return &serverpb.PutResponse{Status: newErrorStatus(err)}, err
 	}
@@ -330,6 +329,7 @@ func (ds *distributedService) CompareAndSet(ctx context.Context, casReq *serverp
 	if err != nil {
 		ds.lg.Error("Unable to CAS in replicated storage", zap.Error(err))
 		res.Status = newErrorStatus(err)
+		return res, err
 	}
 	// '0' indicates CAS update was successful
 	res.Updated = casRes[0] == 0

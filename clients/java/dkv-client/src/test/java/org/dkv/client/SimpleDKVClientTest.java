@@ -24,7 +24,7 @@ public class SimpleDKVClientTest {
 
     @Before
     public void setUp() {
-        dkvCli = new SimpleDKVClient(DKV_TARGET);
+        dkvCli = new SimpleDKVClient(DKV_TARGET, null);
     }
 
     @Test
@@ -99,6 +99,30 @@ public class SimpleDKVClientTest {
     }
 
     @Test
+    public void shouldPerformPutTTLAndGet() {
+        String key = "helloTTL", expVal = "world";
+        // expiryTS set to 2 seconds from now
+        dkvCli.put(key, expVal, (System.currentTimeMillis() / 1000) + 2);
+        String actVal = dkvCli.get(Api.ReadConsistency.LINEARIZABLE, key);
+        assertEquals(format("Invalid value for key: %s", key), expVal, actVal);
+        // expiryTS set to 2 seconds ago
+        dkvCli.put(key, expVal, (System.currentTimeMillis() / 1000) - 2);
+        String actVal2 = dkvCli.get(Api.ReadConsistency.LINEARIZABLE, key);
+        assertEquals(format("Invalid value for key: %s", key), "", actVal2);
+    }
+
+    @Test
+    public void shouldPerformPutAndGetAndDelete() {
+        String key = "hello", expVal = "world";
+        dkvCli.put(key, expVal);
+        String actVal = dkvCli.get(Api.ReadConsistency.LINEARIZABLE, key);
+        assertEquals(format("Invalid value for key: %s", key), expVal, actVal);
+        dkvCli.delete(key);
+        String actVal2 = dkvCli.get(Api.ReadConsistency.LINEARIZABLE, key);
+        assertEquals(format("Invalid value post delete for key: %s", key), "", actVal2);
+    }
+
+    @Test
     public void shouldPerformMultiGet() {
         String keyPref = "K_", valPref = "V_";
         String[] keys = put(10, keyPref, valPref);
@@ -116,7 +140,7 @@ public class SimpleDKVClientTest {
         put(numKeys, keyPref2, valPref2);
         put(numKeys, keyPref3, valPref3);
         String startKey = format("%s%d", keyPref2, startIdx);
-        Iterator<DKVEntry> iterRes = new SimpleDKVClient(DKV_TARGET).iterate(startKey, keyPref2);
+        Iterator<DKVEntry> iterRes = new SimpleDKVClient(DKV_TARGET, null).iterate(startKey, keyPref2);
         while (iterRes.hasNext()) {
             DKVEntry entry = iterRes.next();
             entry.checkStatus();
@@ -128,7 +152,7 @@ public class SimpleDKVClientTest {
 
         startIdx = 1;
         startKey = format("%s%d", keyPref1, startIdx);
-        iterRes = new SimpleDKVClient(DKV_TARGET).iterate(startKey);
+        iterRes = new SimpleDKVClient(DKV_TARGET, null).iterate(startKey);
         while (iterRes.hasNext()) {
             DKVEntry entry = iterRes.next();
             entry.checkStatus();
