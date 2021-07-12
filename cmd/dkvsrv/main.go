@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"os"
@@ -31,42 +30,45 @@ import (
 )
 
 var (
-	disklessMode     bool
-	dbEngine         string
-	dbEngineIni      string
-	dbFolder         string
-	dbListenAddr     string
-	dbRole           string
-	statsdAddr       string
-	replMasterAddr   string
-	replPollInterval time.Duration
-	blockCacheSize   uint64
-
-	// Logging vars
-	dbAccessLog    string
-	verboseLogging bool
+	//disklessMode     bool
+	//dbEngine         string
+	//dbEngineIni      string
+	//dbFolder         string
+	//dbListenAddr     string
+	//dbRole           string
+	//statsdAddr       string
+	//replMasterAddr   string
+	//replPollInterval time.Duration
+	//blockCacheSize   uint64
+	//
+	//// Logging vars
+	//dbAccessLog    string
+	//verboseLogging bool
 	accessLogger   *zap.Logger
 	dkvLogger      *zap.Logger
 
 	nexusLogDirFlag, nexusSnapDirFlag *flag.Flag
 
 	statsCli stats.Client
+	configFile string
 )
 
 func init() {
-	flag.BoolVar(&disklessMode, "diskless", false, fmt.Sprintf("Enables diskless mode where data is stored entirely in memory.\nAvailable on Badger for standalone and slave roles. (default %v)", disklessMode))
-	flag.StringVar(&dbFolder, "db-folder", "/tmp/dkvsrv", "DB folder path for storing data files")
-	flag.StringVar(&dbListenAddr, "listen-addr", "0.0.0.0:8080", "Address on which the DKV service binds")
-	flag.StringVar(&dbEngine, "db-engine", "rocksdb", "Underlying DB engine for storing data - badger|rocksdb")
-	flag.StringVar(&dbEngineIni, "db-engine-ini", "", "An .ini file for configuring the underlying storage engine. Refer badger.ini or rocks.ini for more details.")
-	flag.StringVar(&dbRole, "role", "none", "DB role of this node - none|master|slave")
-	flag.StringVar(&statsdAddr, "statsd-addr", "", "StatsD service address in host:port format")
-	flag.StringVar(&replMasterAddr, "repl-master-addr", "", "Service address of DKV master node for replication")
-	flag.DurationVar(&replPollInterval, "repl-poll-interval", 5*time.Second, "Interval used for polling changes from master. Eg., 10s, 5ms, 2h, etc.")
-	flag.StringVar(&dbAccessLog, "access-log", "", "File for logging DKV accesses eg., stdout, stderr, /tmp/access.log")
-	flag.BoolVar(&verboseLogging, "verbose", false, fmt.Sprintf("Enable verbose logging.\nBy default, only warnings and errors are logged. (default %v)", verboseLogging))
-	flag.Uint64Var(&blockCacheSize, "block-cache-size", defBlockCacheSize, "Amount of cache (in bytes) to set aside for data blocks. A value of 0 disables block caching altogether.")
-	setDKVDefaultsForNexusDirs()
+		flag.StringVar(&configFile, "config", "/etc/dkv.conf", "Path to dkv.conf")
+
+	//	flag.BoolVar(&disklessMode, "diskless", false, fmt.Sprintf("Enables diskless mode where data is stored entirely in memory.\nAvailable on Badger for standalone and slave roles. (default %v)", disklessMode))
+//	flag.StringVar(&dbFolder, "db-folder", "/tmp/dkvsrv", "DB folder path for storing data files")
+//	flag.StringVar(&dbListenAddr, "listen-addr", "0.0.0.0:8080", "Address on which the DKV service binds")
+//	flag.StringVar(&dbEngine, "db-engine", "rocksdb", "Underlying DB engine for storing data - badger|rocksdb")
+//	flag.StringVar(&dbEngineIni, "db-engine-ini", "", "An .ini file for configuring the underlying storage engine. Refer badger.ini or rocks.ini for more details.")
+//	flag.StringVar(&dbRole, "role", "none", "DB role of this node - none|master|slave")
+//	flag.StringVar(&statsdAddr, "statsd-addr", "", "StatsD service address in host:port format")
+//	flag.StringVar(&replMasterAddr, "repl-master-addr", "", "Service address of DKV master node for replication")
+//	flag.DurationVar(&replPollInterval, "repl-poll-interval", 5*time.Second, "Interval used for polling changes from master. Eg., 10s, 5ms, 2h, etc.")
+//	flag.StringVar(&dbAccessLog, "access-log", "", "File for logging DKV accesses eg., stdout, stderr, /tmp/access.log")
+//	flag.BoolVar(&verboseLogging, "verbose", false, fmt.Sprintf("Enable verbose logging.\nBy default, only warnings and errors are logged. (default %v)", verboseLogging))
+//	flag.Uint64Var(&blockCacheSize, "block-cache-size", defBlockCacheSize, "Amount of cache (in bytes) to set aside for data blocks. A value of 0 disables block caching altogether.")
+//	setDKVDefaultsForNexusDirs()
 }
 
 type dkvSrvrRole string
@@ -79,9 +81,15 @@ const (
 
 const defBlockCacheSize = 3 << 30
 
+const (
+	confKeyDBRole = "db.role"
+)
+
 func main() {
 	flag.Parse()
-	validateFlags()
+	LoadConfig(configFile)
+	ValidateConfig()
+
 	setupDKVLogger()
 	setupAccessLogger()
 	setFlagsForNexusDirs()
@@ -90,7 +98,7 @@ func main() {
 	kvs, cp, ca, br := newKVStore()
 	grpcSrvr, lstnr := newGrpcServerListener()
 	defer grpcSrvr.GracefulStop()
-	srvrRole := toDKVSrvrRole(dbRole)
+	srvrRole := toDKVSrvrRole(DKVConfig.GetString(confKeyDBRole))
 	srvrRole.printFlags()
 
 	switch srvrRole {
@@ -133,30 +141,7 @@ func main() {
 	log.Printf("[WARN] Caught signal: %v. Shutting down...\n", sig)
 }
 
-func validateFlags() {
-	if dbListenAddr != "" && strings.IndexRune(dbListenAddr, ':') < 0 {
-		log.Panicf("given listen address: %s is invalid, must be in host:port format", dbListenAddr)
-	}
-	if replMasterAddr != "" && strings.IndexRune(replMasterAddr, ':') < 0 {
-		log.Panicf("given master address: %s for replication is invalid, must be in host:port format", replMasterAddr)
-	}
-	if statsdAddr != "" && strings.IndexRune(statsdAddr, ':') < 0 {
-		log.Panicf("given StatsD address: %s is invalid, must be in host:port format", statsdAddr)
-	}
 
-	if disklessMode && strings.ToLower(dbEngine) == "rocksdb" {
-		log.Panicf("diskless is available only on Badger storage")
-	}
-
-	if strings.ToLower(dbRole) == slaveRole && replMasterAddr == "" {
-		log.Panicf("repl-master-addr must be given in slave mode")
-	}
-	if dbEngineIni != "" {
-		if _, err := os.Stat(dbEngineIni); err != nil && os.IsNotExist(err) {
-			log.Panicf("given storage configuration file: %s does not exist", dbEngineIni)
-		}
-	}
-}
 
 func setupAccessLogger() {
 	accessLogger = zap.NewNop()
