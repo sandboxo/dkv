@@ -695,3 +695,7 @@ func (blgr *zapBadgerLogger) log(ce *zapcore.CheckedEntry, args ...interface{}) 
 	}
 	ce.Write(flds...)
 }
+
+func (bdb *badgerDB) GetMemoryUsage() (storage.MemoryUsage, error) {
+	return nil, errors.New("memory usage API not implemented")
+}

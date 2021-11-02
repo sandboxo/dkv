@@ -932,3 +932,7 @@ func exists(path string) (bool, error) {
 	}
 	return false, err
 }
+
+func (rdb *rocksDB) GetMemoryUsage() (storage.MemoryUsage, error) {
+	return gorocksdb.GetApproximateMemoryUsageByType([]*gorocksdb.DB{rdb.db}, nil)
+}

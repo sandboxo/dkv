@@ -9,6 +9,8 @@ import (
 	"github.com/flipkart-incubator/dkv/pkg/serverpb"
 )
 
+type MemoryUsage interface {}
+
 // A KVStore represents the key value store that provides
 // the underlying storage implementation for the various
 // DKV operations.
@@ -42,6 +44,8 @@ type KVStore interface {
 	// If the expected value is `nil`, then the key is created and
 	// initialized with the given value, atomically.
 	CompareAndSet(key, expect, update []byte) (bool, error)
+
+	GetMemoryUsage() (MemoryUsage, error)
 }
 
 // A Backupable represents the capability of the underlying store
