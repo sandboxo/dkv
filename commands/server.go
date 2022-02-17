@@ -112,7 +112,7 @@ func init() {
 func InitFlags() {
 	addBooleanVarToFlagAndViper(ServerCmd, &disklessMode, "diskless", false, fmt.Sprintf("Enables diskless mode where data is stored entirely in memory.\nAvailable on Badger for standalone and slave roles. (default %v)", disklessMode))
 	addStringVarToFlagAndViper(ServerCmd, &dbFolder, "db-folder", "/tmp/dkvsrv", "DB folder path for storing data files")
-	addStringVarToFlagAndViper(ServerCmd, &dbListenAddr, "listen-addr", "0.0.0.0:80", "Address on which the DKV service binds")
+	addStringVarToFlagAndViper(ServerCmd, &dbListenAddr, "listen-addr", "0.0.0.0:8080", "Address on which the DKV service binds")
 	addStringVarToFlagAndViper(ServerCmd, &dbEngine, "db-engine", "rocksdb", "Underlying DB engine for storing data - badger|rocksdb")
 	addStringVarToFlagAndViper(ServerCmd, &dbEngineIni, "db-engine-ini", "", "An .ini file for configuring the underlying storage engine. Refer badger.ini or rocks.ini for more details.")
 	addStringVarToFlagAndViper(ServerCmd, &dbRole, "role", "none", "DB role of this node - none|master|slave|discovery")
